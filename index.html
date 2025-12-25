@@ -8,12 +8,20 @@
     <title>Box Breathing</title>
     <link rel="manifest" href="manifest.json">
     <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #f59e0b, #d97706);
+            --primary-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+            --surface-color: rgba(30, 30, 30, 0.6);
+            --text-main: #ffedd5;
+            --text-muted: #fdba74;
+        }
+
         body {
-            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             margin: 0;
             padding: 0;
-            background-color: black;
-            color: #ffedd5;
+            background-color: #050505; /* Slightly softer black */
+            color: var(--text-main);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -22,7 +30,6 @@
             overflow: hidden;
         }
 
-        /* Offline notification styles */
         #offline-notification {
             position: fixed;
             top: 10px;
@@ -31,9 +38,10 @@
             background-color: #92400e;
             color: white;
             padding: 8px 16px;
-            border-radius: 4px;
+            border-radius: 20px;
+            font-size: 0.9rem;
             z-index: 1000;
-            display: none;
+            backdrop-filter: blur(4px);
         }
 
         .container {
@@ -56,7 +64,7 @@
             height: 100%;
             z-index: 0;
             opacity: 0;
-            transition: opacity 0.3s ease;
+            transition: opacity 0.5s ease;
             pointer-events: none;
         }
 
@@ -71,320 +79,276 @@
             flex-direction: column;
             align-items: center;
             width: 100%;
+            max-width: 500px;
         }
 
         h1 {
             font-size: 2.5rem;
-            font-weight: bold;
-            margin-bottom: 4rem;
-            color: #fcd34d;
+            font-weight: 700;
+            margin-bottom: 3rem;
+            background: linear-gradient(to right, #fcd34d, #f59e0b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 2px 10px rgba(245, 158, 11, 0.2);
+            text-align: center;
         }
 
         .instruction {
-            font-size: 2rem;
-            margin-bottom: 2rem;
-            color: #fdba74;
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 3rem;
+            color: #fff;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            letter-spacing: 0.05em;
         }
 
+        /* Countdown removed per request, retaining minimal style just in case of revert */
         .countdown {
-            font-size: 4rem;
-            font-weight: bold;
-            margin-bottom: 2.5rem;
-            color: #ff6b6b;
+            display: none; 
         }
 
         .phase-tracker {
             display: flex;
             gap: 1.5rem;
-            margin-bottom: 2rem;
+            margin-bottom: 3rem;
             flex-wrap: wrap;
             justify-content: center;
-            max-width: min(420px, 92vw);
         }
 
         .phase-item {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 0.35rem;
-            opacity: 0.55;
-            transform: translateY(0);
-            transition: opacity 0.25s ease, transform 0.25s ease;
-            font-size: 1rem;
+            gap: 0.5rem;
+            opacity: 0.4;
+            transform: scale(0.9);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            font-size: 0.9rem;
             color: #fde68a;
+            font-weight: 500;
         }
 
         .phase-item.active {
             opacity: 1;
-            transform: translateY(-6px);
-            color: var(--phase-color, #fde68a);
+            transform: scale(1.1);
+            text-shadow: 0 0 10px var(--phase-color);
         }
 
         .phase-dot {
-            width: 12px;
-            height: 12px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
-            border: 2px solid var(--phase-color, #fde68a);
-            background-color: var(--phase-soft, rgba(253, 230, 138, 0.25));
-            box-shadow: 0 0 0 rgba(0, 0, 0, 0);
-            transition: background-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+            background-color: var(--phase-color);
+            box-shadow: 0 0 5px var(--phase-color);
+            transition: all 0.3s ease;
         }
 
         .phase-item.active .phase-dot {
-            background: radial-gradient(circle, var(--phase-color, #fde68a) 0%, rgba(0, 0, 0, 0) 70%);
-            box-shadow: 0 0 12px var(--phase-color, #fde68a);
-            transform: scale(1.05);
-        }
-
-        .phase-label {
-            letter-spacing: 0.05em;
-        }
-
-        .phase-item.active .phase-label {
-            color: inherit;
-        }
-
-        .prompt {
-            font-size: 1.5rem;
-            margin-bottom: 2rem;
-            color: #fde68a;
-        }
-
-        .complete {
-            font-size: 2rem;
-            margin-bottom: 2rem;
-            color: #4ade80;
-        }
-
-        .limit-warning {
-            margin-bottom: 1.5rem;
-            color: #f97316;
-            font-size: 1rem;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
+            box-shadow: 0 0 15px var(--phase-color), 0 0 30px var(--phase-color);
+            transform: scale(1.2);
         }
 
         .timer {
             position: fixed;
-            top: 1rem;
-            right: 1rem;
+            top: 20px;
+            right: 20px;
+            font-family: monospace;
+            font-size: 1.1rem;
             color: #fde68a;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px 12px;
+            border-radius: 12px;
+            backdrop-filter: blur(4px);
             z-index: 2;
+            border: 1px solid rgba(253, 230, 138, 0.1);
+        }
+
+        .settings {
+            background: var(--surface-color);
+            padding: 1.5rem;
+            border-radius: 16px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            margin-bottom: 2rem;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .form-group {
             display: flex;
             align-items: center;
-            margin-bottom: 1rem;
-            gap: 0.5rem;
-        }
-
-        .settings {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            margin-bottom: 2rem;
+            margin-bottom: 1.25rem;
             gap: 1rem;
         }
 
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Modernized Inputs */
         input[type="number"] {
-            background-color: #78350f;
+            background-color: rgba(0, 0, 0, 0.3);
             color: #ffedd5;
-            border: 1px solid #d97706;
-            padding: 0.5rem;
-            border-radius: 0.25rem;
-            font-size: 16px;
-        }
-
-        label {
-            color: #fde68a;
-            display: flex;
-            align-items: center;
-        }
-
-        button {
-            font-size: 1.25rem;
-            padding: 0.75rem 1.5rem;
-            background: linear-gradient(135deg, #d97706, #b45309);
-            color: black;
-            border: none;
+            border: 1px solid rgba(217, 119, 6, 0.3);
+            padding: 0.75rem;
             border-radius: 8px;
+            font-size: 1rem;
+            width: 100%;
+            transition: border-color 0.2s;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #f59e0b;
+        }
+
+        /* Modernized Button */
+        button {
+            font-size: 1.1rem;
+            font-weight: 600;
+            padding: 1rem 2rem;
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            border-radius: 12px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 0.5rem;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-            transition: all 0.2s ease;
-        }
-
-        button:hover {
-            background: linear-gradient(135deg, #b45309, #92400e);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            gap: 0.75rem;
+            box-shadow: var(--primary-shadow);
+            transition: transform 0.2s, box-shadow 0.2s, filter 0.2s;
+            width: 100%;
+            max-width: 300px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         button:active {
-            transform: translateY(0);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            transform: scale(0.98);
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.2);
         }
 
+        .preset-button {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #fde68a;
+            box-shadow: none;
+            padding: 0.75rem 1rem;
+            font-size: 0.9rem;
+            width: auto;
+            flex: 1;
+            min-width: 80px;
+        }
+
+        .preset-button:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Modern Toggle Switch */
         .switch {
             position: relative;
             display: inline-block;
-            width: 48px;
-            height: 24px;
+            width: 52px;
+            height: 28px;
+            flex-shrink: 0;
         }
 
-        .switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
+        .switch input { opacity: 0; width: 0; height: 0; }
 
         .slider {
             position: absolute;
             cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #374151;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(255, 255, 255, 0.1);
             transition: .4s;
-            border-radius: 24px;
+            border-radius: 34px;
         }
 
         .slider:before {
             position: absolute;
             content: "";
-            height: 18px;
-            width: 18px;
-            left: 3px;
-            bottom: 3px;
-            background-color: white;
+            height: 20px;
+            width: 20px;
+            left: 4px;
+            bottom: 4px;
+            background-color: #9ca3af;
             transition: .4s;
             border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
 
         input:checked + .slider {
-            background-color: #d97706;
+            background-color: rgba(245, 158, 11, 0.2);
+            border: 1px solid rgba(245, 158, 11, 0.5);
         }
 
         input:checked + .slider:before {
             transform: translateX(24px);
+            background-color: #f59e0b;
         }
 
-        .icon {
-            display: inline-block;
-            vertical-align: middle;
-            width: 24px;
-            height: 24px;
-            stroke-width: 2;
-            stroke: currentColor;
-            fill: none;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-        }
-
-        .shortcut-buttons {
-            display: flex;
-            gap: 0.5rem;
-            margin-top: 1.5rem;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-
-        .preset-button {
-            font-size: 1rem;
-            padding: 0.5rem 1rem;
-            background-color: #92400e;
-            color: #ffedd5;
-        }
-
-        .preset-button:hover {
-            background-color: #78350f;
-        }
-
+        /* Range Slider Modernization */
         .slider-container {
+            background: var(--surface-color);
+            padding: 1.5rem;
+            border-radius: 16px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            margin: 1rem 0;
+            width: 100%;
+            box-sizing: border-box;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            margin-top: 1rem;
-            margin-bottom: 1rem;
+            gap: 1rem;
         }
 
         input[type="range"] {
             -webkit-appearance: none;
-            appearance: none;
-            width: 200px;
-            height: 8px; /* Slightly thinner for modernity */
-            background: linear-gradient(90deg, #78350f 0%, #d97706 100%);
-            border-radius: 5px;
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
             outline: none;
-            cursor: pointer;
         }
 
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
-            appearance: none;
-            width: 20px;
-            height: 20px;
-            background: linear-gradient(45deg, #d97706, #b45309);
+            width: 24px;
+            height: 24px;
+            background: #f59e0b;
             border-radius: 50%;
             cursor: pointer;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.2);
+            transition: box-shadow 0.2s;
         }
 
-        input[type="range"]::-moz-range-track {
-            width: 200px;
-            height: 8px; /* Match height */
-            background: linear-gradient(90deg, #78350f 0%, #d97706 100%);
-            border-radius: 5px;
+        input[type="range"]::-webkit-slider-thumb:hover {
+            box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.3);
         }
 
-        input[type="range"]::-moz-range-thumb {
+        .icon {
             width: 20px;
             height: 20px;
-            background: linear-gradient(45deg, #d97706, #b45309);
-            border-radius: 50%;
-            cursor: pointer;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            stroke-width: 2.5;
+        }
+
+        .shortcut-buttons {
+            display: flex;
+            gap: 0.75rem;
+            width: 100%;
+            justify-content: space-between;
         }
 
         @media (max-width: 480px) {
-            h1 {
-                font-size: 2.2rem;
-                margin-bottom: 3rem;
-            }
-
-            .instruction {
-                font-size: 1.8rem;
-                margin-bottom: 1.75rem;
-            }
-
-            .countdown {
-                font-size: 3.5rem;
-                margin-bottom: 2rem;
-            }
-
-            .phase-tracker {
-                gap: 1.1rem;
-                margin-bottom: 1.5rem;
-            }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-            button,
-            .slider,
-            input[type="range"] {
-                transition-duration: 0.01ms !important;
-                animation-duration: 0.01ms !important;
-            }
+            h1 { font-size: 2rem; }
+            .instruction { font-size: 2rem; }
+            button { font-size: 1rem; padding: 0.8rem 1.5rem; }
         }
     </style>
 </head>
 <body>
-    <!-- Offline notification div -->
     <div id="offline-notification" style="display: none;">You are offline, but the app will work normally</div>
 
     <div class="container">
@@ -395,16 +359,11 @@
     <script src="app.js"></script>
 
     <script>
-        // Service Worker Registration
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('service-worker.js')
-                    .then(registration => {
-                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
-                    })
-                    .catch(error => {
-                        console.log('ServiceWorker registration failed: ', error);
-                    });
+                    .then(registration => console.log('SW Registered'))
+                    .catch(error => console.log('SW Failed:', error));
             });
         }
     </script>
