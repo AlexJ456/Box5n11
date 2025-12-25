@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
         pause: `<svg class="icon" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`,
         volume2: `<svg class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`,
         volumeX: `<svg class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>`,
-        rotateCcw: `<svg class="icon" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></polyline></svg>`,
+        rotateCcw: `<svg class="icon" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>`,
         clock: `<svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`
     };
 
@@ -44,7 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
             case 0: return 'Inhale';
             case 1: return 'Hold';
             case 2: return 'Exhale';
-            default: return 'Wait';
+            case 3: return 'Wait';
+            default: return '';
         }
     }
 
@@ -126,30 +127,23 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
 
-    // Improved sound function: plays a pleasant chime (arpeggio) based on phase, with fade-out
-    const phaseFrequencies = [440, 523, 659, 784]; // A C E G ascending for each phase
-    function playTone(phase) {
-        if (!state.soundEnabled || !audioContext) return;
-        try {
-            const freq = phaseFrequencies[phase % phaseFrequencies.length];
-            const oscillator1 = audioContext.createOscillator();
-            const oscillator2 = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            oscillator1.type = 'sine';
-            oscillator1.frequency.setValueAtTime(freq, audioContext.currentTime);
-            oscillator2.type = 'triangle';
-            oscillator2.frequency.setValueAtTime(freq * 2, audioContext.currentTime); // Harmonic
-            oscillator1.connect(gainNode);
-            oscillator2.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-            oscillator1.start(audioContext.currentTime);
-            oscillator2.start(audioContext.currentTime);
-            oscillator1.stop(audioContext.currentTime + 0.5);
-            oscillator2.stop(audioContext.currentTime + 0.5);
-        } catch (e) {
-            console.error('Error playing tone:', e);
+    // Improved sound: A gentle, fading chirp using multiple frequencies for a nicer tone.
+    function playTone() {
+        if (state.soundEnabled && audioContext) {
+            try {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueCurveAtTime([440, 550, 660], audioContext.currentTime, 0.08); // Ascending notes
+                gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.15); // Fade out
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + 0.15);
+            } catch (e) {
+                console.error('Error playing tone:', e);
+            }
         }
     }
 
@@ -198,9 +192,9 @@ document.addEventListener('DOMContentLoaded', () => {
             state.sessionComplete = false;
             state.timeLimitReached = false;
             state.pulseStartTime = performance.now();
-            playTone(state.count); // Play sound for starting phase
+            playTone();
             startInterval();
-            animate();
+            // No need to animate or draw during play (removed box animation)
             requestWakeLock();
         } else {
             clearInterval(interval);
@@ -212,7 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
             state.timeLimitReached = false;
             state.hasStarted = false;
             invalidateGradient();
-            drawScene({ progress: 0, showTrail: false, phase: state.count });
+            drawScene({ progress: 0, showTrail: false, phase: state.count }); // Draw static dots for homepage
             state.pulseStartTime = null;
             releaseWakeLock();
         }
@@ -232,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearInterval(interval);
         cancelAnimationFrame(animationFrameId);
         invalidateGradient();
-        drawScene({ progress: 0, showTrail: false, phase: state.count });
+        drawScene({ progress: 0, showTrail: false, phase: state.count }); // Draw static dots for homepage
         releaseWakeLock();
         render();
     }
@@ -261,9 +255,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log('AudioContext resumed');
             });
         }
-        playTone(state.count); // Play sound for starting phase
+        playTone();
         startInterval();
-        animate();
+        // No animate during play
         requestWakeLock();
         render();
     }
@@ -283,31 +277,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.count = (state.count + 1) % 4;
                 state.pulseStartTime = performance.now();
                 state.countdown = state.phaseTime;
-                playTone(state.count); // Play sound for new phase
+                playTone();
+                render(); // Update UI without drawing
                 if (state.count === 3 && state.timeLimitReached) {
                     state.sessionComplete = true;
                     state.isPlaying = false;
                     state.hasStarted = false;
                     clearInterval(interval);
-                    cancelAnimationFrame(animationFrameId);
                     releaseWakeLock();
                 }
             } else {
                 state.countdown -= 1;
             }
             lastStateUpdate = performance.now();
-            render();
         }, 1000);
     }
 
-    function drawScene({ progress = 0, phase = state.count, showTrail = state.isPlaying, timestamp = performance.now() } = {}) {
-        if (!ctx) return;
+    // Removed most of drawScene; now only draws static dots for homepage when not playing
+    function drawScene({ timestamp = performance.now() } = {}) {
+        if (!ctx || state.isPlaying) return; // No drawing during play
 
         const width = state.viewportWidth || canvas.clientWidth || canvas.width;
         const height = state.viewportHeight || canvas.clientHeight || canvas.height;
-        if (!width || !height) {
-            return;
-        }
+        if (!width || !height) return;
 
         const scale = state.devicePixelRatio || 1;
         ctx.save();
@@ -315,139 +307,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
         ctx.clearRect(0, 0, width, height);
 
-        if (!state.hasStarted && !state.sessionComplete) {
-            invalidateGradient();
-            ctx.restore();
-            return;
-        }
+        // Draw static, bigger phase dots in center for homepage
+        const dotSize = Math.min(width, height) * 0.15; // Bigger dots
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const radius = dotSize / 2;
 
-        // Removed box animation during exercise: if playing, skip drawing the box/trail elements
-        if (state.isPlaying) {
-            ctx.restore();
-            return;
-        }
+        phaseColors.forEach((color, index) => {
+            const angle = (index / 4) * 2 * Math.PI;
+            const x = centerX + Math.cos(angle) * radius;
+            const y = centerY + Math.sin(angle) * radius;
 
-        const clampedProgress = Math.max(0, Math.min(1, progress));
-        const easedProgress = 0.5 - (Math.cos(Math.PI * clampedProgress) / 2);
-        const baseSize = Math.min(width, height) * 0.6;
-        const topMargin = 20;
-        const sizeWithoutBreath = Math.min(baseSize, height - topMargin * 2);
-        const verticalOffset = Math.min(height * 0.18, 110);
-        const preferredTop = height / 2 + verticalOffset - sizeWithoutBreath / 2;
-        const top = Math.max(topMargin, Math.min(preferredTop, height - sizeWithoutBreath - topMargin));
-        const left = (width - sizeWithoutBreath) / 2;
-
-        const now = timestamp;
-        const allowMotion = !state.prefersReducedMotion;
-        let breathInfluence = 0;
-        if (phase === 0) {
-            breathInfluence = easedProgress;
-        } else if (phase === 2) {
-            breathInfluence = 1 - easedProgress;
-        } else if (allowMotion) {
-            breathInfluence = 0.3 + 0.2 * (0.5 + 0.5 * Math.sin(now / 350));
-        } else {
-            breathInfluence = 0.3;
-        }
-
-        let pulseBoost = 0;
-        if (allowMotion && state.pulseStartTime !== null) {
-            const pulseElapsed = (now - state.pulseStartTime) / 1000;
-            if (pulseElapsed < 0.6) {
-                pulseBoost = Math.sin((pulseElapsed / 0.6) * Math.PI);
-            }
-        }
-
-        const size = sizeWithoutBreath * (1 + 0.08 * breathInfluence + 0.03 * pulseBoost);
-        const adjustedLeft = left + (sizeWithoutBreath - size) / 2;
-        const adjustedTop = top + (sizeWithoutBreath - size) / 2;
-        const points = [
-            { x: adjustedLeft, y: adjustedTop + size },
-            { x: adjustedLeft, y: adjustedTop },
-            { x: adjustedLeft + size, y: adjustedTop },
-            { x: adjustedLeft + size, y: adjustedTop + size }
-        ];
-        const startPoint = points[phase];
-        const endPoint = points[(phase + 1) % 4];
-        const currentX = startPoint.x + easedProgress * (endPoint.x - startPoint.x);
-        const currentY = startPoint.y + easedProgress * (endPoint.y - startPoint.y);
-
-        const accentColor = phaseColors[phase] || '#f97316';
-        const shouldShowTrail = allowMotion && showTrail;
-
-        const gradientKey = `${Math.round(size * 100)}-${accentColor}-${Math.round(adjustedLeft)}-${Math.round(adjustedTop)}`;
-        if (!cachedGradient || cachedGradientKey !== gradientKey) {
-            cachedGradient = ctx.createRadialGradient(
-                adjustedLeft + size / 2,
-                adjustedTop + size / 2,
-                size * 0.2,
-                adjustedLeft + size / 2,
-                adjustedTop + size / 2,
-                size
-            );
-            cachedGradient.addColorStop(0, hexToRgba(accentColor, 0.18));
-            cachedGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-            cachedGradientKey = gradientKey;
-        }
-        ctx.fillStyle = cachedGradient;
-        ctx.fillRect(0, 0, width, height);
-
-        ctx.strokeStyle = hexToRgba('#fcd34d', 0.25);
-        ctx.lineWidth = Math.max(2, size * 0.015);
-        ctx.lineJoin = 'round';
-        ctx.strokeRect(adjustedLeft, adjustedTop, size, size);
-
-        ctx.lineWidth = Math.max(4, size * 0.03);
-        ctx.strokeStyle = hexToRgba(accentColor, shouldShowTrail ? 0.8 : 0.45);
-        ctx.shadowColor = hexToRgba(accentColor, 0.5);
-        ctx.shadowBlur = shouldShowTrail ? 15 : 8;
-        ctx.beginPath();
-        ctx.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i <= phase; i++) {
-            ctx.lineTo(points[i].x, points[i].y);
-        }
-        if (shouldShowTrail) {
-            ctx.lineTo(currentX, currentY);
-        }
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        const baseRadius = Math.max(8, size * 0.04);
-        let radius = baseRadius * (1 + 0.35 * breathInfluence + 0.25 * pulseBoost);
-        if (allowMotion && (phase === 1 || phase === 3)) {
-            radius += baseRadius * 0.12 * (0.5 + 0.5 * Math.sin(now / 200));
-        }
-
-        ctx.beginPath();
-        ctx.arc(currentX, currentY, radius * 1.8, 0, 2 * Math.PI);
-        ctx.fillStyle = hexToRgba(accentColor, 0.25);
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.arc(currentX, currentY, radius, 0, 2 * Math.PI);
-        ctx.fillStyle = accentColor;
-        ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, 2 * Math.PI);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.shadowColor = hexToRgba(color, 0.5);
+            ctx.shadowBlur = 15;
+        });
 
         ctx.restore();
     }
 
     function updateCanvasVisibility() {
-        const shouldShow = !state.isPlaying && (state.hasStarted || state.sessionComplete); // Only show canvas when not playing
-        canvas.classList.toggle('is-visible', shouldShow);
+        canvas.classList.toggle('is-visible', !state.isPlaying); // Only visible on homepage (not playing)
     }
 
     function animate() {
-        if (!state.isPlaying) return;
-        const now = performance.now();
-        const elapsed = (now - lastStateUpdate) / 1000;
-        const effectiveCountdown = state.countdown - elapsed;
-        let progress = (state.phaseTime - effectiveCountdown) / state.phaseTime;
-        progress = Math.max(0, Math.min(1, progress));
-
-        // Removed drawing during exercise animation
-        // drawScene({ progress, timestamp: now });
-
-        animationFrameId = requestAnimationFrame(animate);
+        // No animation during play (removed)
     }
 
     function render() {
@@ -458,20 +345,8 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `
                 <div class="timer">Total Time: ${formatTime(state.totalTime)}</div>
                 <div class="instruction">${getInstruction(state.count)}</div>
-            `; // Removed countdown div
-            const phases = ['Inhale', 'Hold', 'Exhale', 'Wait'];
-            html += `<div class="phase-tracker">`;
-            phases.forEach((label, index) => {
-                const phaseColor = phaseColors[index] || '#fde68a';
-                const softPhaseColor = hexToRgba(phaseColor, 0.25);
-                html += `
-                    <div class="phase-item ${index === state.count ? 'active' : ''}" style="--phase-color: ${phaseColor}; --phase-soft: ${softPhaseColor};">
-                        <span class="phase-dot"></span>
-                        <span class="phase-label">${label}</span>
-                    </div>
-                `;
-            });
-            html += `</div>`;
+            `;
+            // Removed countdown, phase-tracker (dots are now only on homepage)
         }
         if (state.timeLimitReached && !state.sessionComplete) {
             const limitMessage = state.isPlaying ? 'Finishing current cycle…' : 'Time limit reached';
@@ -479,17 +354,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (!state.isPlaying && !state.sessionComplete) {
             html += `
-                <div class="phase-dots-homepage">`; // Added large homepage dots container
-            ['Inhale', 'Hold', 'Exhale', 'Wait'].forEach((label, index) => {
-                const phaseColor = phaseColors[index] || '#fde68a';
-                const softPhaseColor = hexToRgba(phaseColor, 0.5);
-                html += `
-                    <div class="homepage-dot" style="--phase-color: ${phaseColor}; --phase-soft: ${softPhaseColor};">
-                        <span class="homepage-label">${label}</span>
-                    </div>
-                `;
-            });
-            html += `</div>
                 <div class="settings">
                     <div class="form-group">
                         <label class="switch">
@@ -528,14 +392,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 </button>
             `;
         }
-        if (!state.isPlaying && !state.sessionComplete) {
-            html += `
-                <div class="slider-container">
-                    <label for="phase-time-slider">Phase Time (seconds): <span id="phase-time-value">${state.phaseTime}</span></label>
-                    <input type="range" min="3" max="6" step="1" value="${state.phaseTime}" id="phase-time-slider">
-                </div>
-            `;
-        }
         if (state.sessionComplete) {
             html += `
                 <button id="reset">
@@ -556,6 +412,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     <button id="preset-10min" class="preset-button">
                         ${icons.clock} 10 min
                     </button>
+                </div>
+            `;
+        }
+        if (!state.isPlaying && !state.sessionComplete) {
+            html += `
+                <div class="slider-container">
+                    <label for="phase-time-slider">Phase Time (seconds): <span id="phase-time-value">${state.phaseTime}</span></label>
+                    <input type="range" min="3" max="6" step="1" value="${state.phaseTime}" id="phase-time-slider">
                 </div>
             `;
         }
@@ -583,7 +447,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('preset-10min').addEventListener('click', () => startWithPreset(10));
         }
         if (!state.isPlaying) {
-            drawScene({ progress: state.sessionComplete ? 1 : 0, phase: state.count, showTrail: false });
+            drawScene(); // Only draw static dots on homepage
         }
     }
 
