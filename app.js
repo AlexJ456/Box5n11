@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
         pause: `<svg class="icon" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`,
         volume2: `<svg class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`,
         volumeX: `<svg class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>`,
-        rotateCcw: `<svg class="icon" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>`,
+        rotateCcw: `<svg class="icon" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></polyline></svg>`,
         clock: `<svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`
     };
 
@@ -44,8 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
             case 0: return 'Inhale';
             case 1: return 'Hold';
             case 2: return 'Exhale';
-            case 3: return 'Wait';
-            default: return '';
+            default: return 'Wait';
         }
     }
 
@@ -127,18 +126,30 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
 
-    function playTone() {
-        if (state.soundEnabled && audioContext) {
-            try {
-                const oscillator = audioContext.createOscillator();
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
-                oscillator.connect(audioContext.destination);
-                oscillator.start();
-                oscillator.stop(audioContext.currentTime + 0.1);
-            } catch (e) {
-                console.error('Error playing tone:', e);
-            }
+    // Improved sound function: plays a pleasant chime (arpeggio) based on phase, with fade-out
+    const phaseFrequencies = [440, 523, 659, 784]; // A C E G ascending for each phase
+    function playTone(phase) {
+        if (!state.soundEnabled || !audioContext) return;
+        try {
+            const freq = phaseFrequencies[phase % phaseFrequencies.length];
+            const oscillator1 = audioContext.createOscillator();
+            const oscillator2 = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            oscillator1.type = 'sine';
+            oscillator1.frequency.setValueAtTime(freq, audioContext.currentTime);
+            oscillator2.type = 'triangle';
+            oscillator2.frequency.setValueAtTime(freq * 2, audioContext.currentTime); // Harmonic
+            oscillator1.connect(gainNode);
+            oscillator2.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            oscillator1.start(audioContext.currentTime);
+            oscillator2.start(audioContext.currentTime);
+            oscillator1.stop(audioContext.currentTime + 0.5);
+            oscillator2.stop(audioContext.currentTime + 0.5);
+        } catch (e) {
+            console.error('Error playing tone:', e);
         }
     }
 
@@ -187,7 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
             state.sessionComplete = false;
             state.timeLimitReached = false;
             state.pulseStartTime = performance.now();
-            playTone();
+            playTone(state.count); // Play sound for starting phase
             startInterval();
             animate();
             requestWakeLock();
@@ -250,7 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log('AudioContext resumed');
             });
         }
-        playTone();
+        playTone(state.count); // Play sound for starting phase
         startInterval();
         animate();
         requestWakeLock();
@@ -272,7 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.count = (state.count + 1) % 4;
                 state.pulseStartTime = performance.now();
                 state.countdown = state.phaseTime;
-                playTone();
+                playTone(state.count); // Play sound for new phase
                 if (state.count === 3 && state.timeLimitReached) {
                     state.sessionComplete = true;
                     state.isPlaying = false;
@@ -306,6 +317,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!state.hasStarted && !state.sessionComplete) {
             invalidateGradient();
+            ctx.restore();
+            return;
+        }
+
+        // Removed box animation during exercise: if playing, skip drawing the box/trail elements
+        if (state.isPlaying) {
             ctx.restore();
             return;
         }
@@ -415,7 +432,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateCanvasVisibility() {
-        const shouldShow = state.isPlaying || state.sessionComplete;
+        const shouldShow = !state.isPlaying && (state.hasStarted || state.sessionComplete); // Only show canvas when not playing
         canvas.classList.toggle('is-visible', shouldShow);
     }
 
@@ -427,7 +444,8 @@ document.addEventListener('DOMContentLoaded', () => {
         let progress = (state.phaseTime - effectiveCountdown) / state.phaseTime;
         progress = Math.max(0, Math.min(1, progress));
 
-        drawScene({ progress, timestamp: now });
+        // Removed drawing during exercise animation
+        // drawScene({ progress, timestamp: now });
 
         animationFrameId = requestAnimationFrame(animate);
     }
@@ -440,8 +458,7 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `
                 <div class="timer">Total Time: ${formatTime(state.totalTime)}</div>
                 <div class="instruction">${getInstruction(state.count)}</div>
-                <div class="countdown">${state.countdown}</div>
-            `;
+            `; // Removed countdown div
             const phases = ['Inhale', 'Hold', 'Exhale', 'Wait'];
             html += `<div class="phase-tracker">`;
             phases.forEach((label, index) => {
@@ -462,6 +479,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (!state.isPlaying && !state.sessionComplete) {
             html += `
+                <div class="phase-dots-homepage">`; // Added large homepage dots container
+            ['Inhale', 'Hold', 'Exhale', 'Wait'].forEach((label, index) => {
+                const phaseColor = phaseColors[index] || '#fde68a';
+                const softPhaseColor = hexToRgba(phaseColor, 0.5);
+                html += `
+                    <div class="homepage-dot" style="--phase-color: ${phaseColor}; --phase-soft: ${softPhaseColor};">
+                        <span class="homepage-label">${label}</span>
+                    </div>
+                `;
+            });
+            html += `</div>
                 <div class="settings">
                     <div class="form-group">
                         <label class="switch">
